@@ -1,4 +1,4 @@
-import json
+import json, jwt, datetime
 import bcrypt
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -9,11 +9,27 @@ from .passwords import password_hash
 
 # Create your views here.
 
+
+from django.conf import settings
+SECRET_KEY = settings.SECRET_KEY
+
+
 def home_page(request):
-    if request.session.get('location') == 'India':
-        return JsonResponse({'status': 200, 'message': 'Show India home page'})
-    else:
-        return JsonResponse({'status': 200, 'message': 'Show US home page'})
+    try:
+
+        auth_token = request.headers.get('Authorization')
+        auth_token = auth_token.split(' ')[1]
+
+        user_info = jwt.decode(auth_token, SECRET_KEY, algorithms='HS256')
+        print(user_info)
+    
+    except Exception as e:
+        return JsonResponse({'error': 'User verification failed'})
+
+    loc = user_info['username']
+
+    return JsonResponse({'status': 200, 'message': 'Showing home page' + 'of '+ loc})
+    
 
 @csrf_exempt
 def register(request):
@@ -38,14 +54,6 @@ def register(request):
 @csrf_exempt
 def login(request):
 
-    username = request.session.get('username')
-    if username:
-        message = "You are already logged in " + username
-        return JsonResponse(
-            {
-                "status": message
-            }
-        )
 
     data = json.loads(request.body)
     try:
@@ -57,9 +65,18 @@ def login(request):
     database_password = u1.password
 
     if bcrypt.checkpw(entered_password.encode('utf-8'), database_password.encode('utf-8')):
-        response = JsonResponse({'status': 200})
-        request.session['username'] = u1.username
-        request.session['location'] = 'India'
+        data = {
+            'username': u1.username,
+            'location': 'India',
+            'role': 'admin',
+            'iat': datetime.datetime.now(datetime.timezone.utc)
+        }
+
+        token = jwt.encode(data, SECRET_KEY, algorithm='HS256')
+        
+        
+        response = JsonResponse({'status': 200 , 'user_token': token})
+        
         return response
 
 
